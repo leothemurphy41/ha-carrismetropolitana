@@ -1,0 +1,4 @@
+update_data:
+  name: Atualizar dados
+  description: Força a atualização dos dados da Carris Metropolitana.
+  fields: {}

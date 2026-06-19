@@ -1,0 +1,91 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Carris Metropolitana — Municípios",
+        "description": "Selecione os municípios da Área Metropolitana de Lisboa que pretende monitorizar.",
+        "data": {
+          "municipality_ids": "Municípios"
+        }
+      },
+      "lines": {
+        "title": "Carris Metropolitana — Linhas",
+        "description": "Selecione as linhas de autocarro que pretende acompanhar.",
+        "data": {
+          "line_ids": "Linhas"
+        }
+      },
+      "stops": {
+        "title": "Carris Metropolitana — Paragens",
+        "description": "Selecione as paragens para monitorizar as próximas chegadas (opcional).",
+        "data": {
+          "stop_ids": "Paragens"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Não foi possível ligar à API da Carris Metropolitana. Verifique a sua ligação à internet.",
+      "no_municipalities_selected": "Por favor, selecione pelo menos um município.",
+      "no_lines_found": "Não foram encontradas linhas para os municípios selecionados.",
+      "no_stops_found": "Não foram encontradas paragens para os municípios selecionados.",
+      "timeout": "A ligação à API da Carris Metropolitana expirou. Tente novamente mais tarde.",
+      "unknown": "Ocorreu um erro inesperado. Verifique os logs para mais informações."
+    },
+    "abort": {
+      "already_configured": "A integração Carris Metropolitana já está configurada."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Atualizar configuração",
+        "description": "Altere as linhas e paragens monitorizadas.",
+        "data": {
+          "line_ids": "Linhas",
+          "stop_ids": "Paragens"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Não foi possível ligar à API da Carris Metropolitana. Verifique a sua ligação à internet.",
+      "timeout": "A ligação à API da Carris Metropolitana expirou. Tente novamente mais tarde.",
+      "unknown": "Ocorreu um erro inesperado. Verifique os logs para mais informações."
+    },
+    "abort": {
+      "no_data": "Não foi possível carregar os dados. Tente novamente."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "stop_arrivals": {
+        "name": "Paragem {stop_id}",
+        "state": {
+          "no_service": "Sem serviço"
+        },
+        "unit": "chegada"
+      },
+      "line_vehicles": {
+        "name": "Linha {line_id}",
+        "state": {
+          "0": "0 veículos",
+          "1": "1 veículo",
+          "other": "{count} veículos"
+        }
+      },
+      "alerts": {
+        "name": "Alertas",
+        "state": {
+          "0": "0 alertas",
+          "1": "1 alerta",
+          "other": "{count} alertas"
+        }
+      }
+    }
+  },
+  "services": {
+    "update_data": {
+      "name": "Atualizar dados",
+      "description": "Força a atualização dos dados da Carris Metropolitana."
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "domain": "carrismetropolitana",
+  "name": "Carris Metropolitana",
+  "version": "1.0.1",
+  "documentation": "https://github.com/leothemurphy41/ha-carrismetropolitana",
+  "issue_tracker": "https://github.com/leothemurphy41/ha-carrismetropolitana/issues",
+  "codeowners": ["@leothemurphy41"],
+  "requirements": [
+    "aiohttp>=3.9.0"
+  ],
+  "dependencies": [],
+  "after_dependencies": ["http"],
+  "config_flow": true,
+  "icon": "icon.svg",
+  "iot_class": "cloud_polling",
+  "integration_type": "hub",
+  "homeassistant": "2026.1.0",
+  "loggers": ["custom_components.carrismetropolitana"]
+}

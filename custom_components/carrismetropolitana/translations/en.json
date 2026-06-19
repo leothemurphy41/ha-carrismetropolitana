@@ -1,0 +1,91 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Carris Metropolitana — Municipalities",
+        "description": "Select the municipalities in the Lisbon Metropolitan Area you want to monitor.",
+        "data": {
+          "municipality_ids": "Municipalities"
+        }
+      },
+      "lines": {
+        "title": "Carris Metropolitana — Lines",
+        "description": "Select the bus lines you want to track.",
+        "data": {
+          "line_ids": "Lines"
+        }
+      },
+      "stops": {
+        "title": "Carris Metropolitana — Stops",
+        "description": "Select the stops to monitor for upcoming arrivals (optional).",
+        "data": {
+          "stop_ids": "Stops"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to the Carris Metropolitana API. Please check your internet connection.",
+      "no_municipalities_selected": "Please select at least one municipality.",
+      "no_lines_found": "No lines found for the selected municipalities.",
+      "no_stops_found": "No stops found for the selected municipalities.",
+      "timeout": "The connection to the Carris Metropolitana API timed out. Please try again later.",
+      "unknown": "An unexpected error occurred. Check the logs for more information."
+    },
+    "abort": {
+      "already_configured": "Carris Metropolitana is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Update configuration",
+        "description": "Change the monitored lines and stops.",
+        "data": {
+          "line_ids": "Lines",
+          "stop_ids": "Stops"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to the Carris Metropolitana API. Please check your internet connection.",
+      "timeout": "The connection to the Carris Metropolitana API timed out. Please try again later.",
+      "unknown": "An unexpected error occurred. Check the logs for more information."
+    },
+    "abort": {
+      "no_data": "Could not load data. Please try again."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "stop_arrivals": {
+        "name": "Stop {stop_id}",
+        "state": {
+          "no_service": "No service"
+        },
+        "unit": "arrival"
+      },
+      "line_vehicles": {
+        "name": "Line {line_id}",
+        "state": {
+          "0": "0 vehicles",
+          "1": "1 vehicle",
+          "other": "{count} vehicles"
+        }
+      },
+      "alerts": {
+        "name": "Alerts",
+        "state": {
+          "0": "0 alerts",
+          "1": "1 alert",
+          "other": "{count} alerts"
+        }
+      }
+    }
+  },
+  "services": {
+    "update_data": {
+      "name": "Update data",
+      "description": "Force update of Carris Metropolitana data."
+    }
+  }
+}

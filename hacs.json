@@ -1,0 +1,7 @@
+{
+  "name": "Carris Metropolitana",
+  "render_readme": true,
+  "zip_release": false,
+  "country": "PT",
+  "homeassistant": "2024.1.0"
+}
