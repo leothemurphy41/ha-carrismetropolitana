@@ -13,6 +13,10 @@ Integração para Home Assistant que monitoriza as linhas, paragens e veículos 
 - ♻️ Atualização automática a cada minuto
 - 🔧 Configuração pela UI — sem YAML
 
+
+<img width="314" height="365" alt="image" src="https://github.com/user-attachments/assets/d39b26aa-e532-4c26-9f13-82d04c0d5962" />
+
+
 ## 📦 Instalação via HACS
 
 1. Clica no botão "Adicionar ao HACS" acima
