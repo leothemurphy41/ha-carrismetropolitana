@@ -55,6 +55,24 @@ async def async_setup_entry(
     _LOGGER.info("Setting up %s Carris Metropolitana sensors", len(entities))
     async_add_entities(entities, update_before_add=True)
 
+    # Add static/network sensors per municipality and per line
+    static_entities: list[SensorEntity] = []
+
+    # Lines per municipality
+    for mun_id in coordinator.municipality_ids:
+        static_entities.append(LinesMunicipalitySensor(coordinator, mun_id))
+
+    # Stops per municipality
+    for mun_id in coordinator.municipality_ids:
+        static_entities.append(StopsMunicipalitySensor(coordinator, mun_id))
+
+    # Line info sensors
+    for line_id in coordinator.line_ids:
+        static_entities.append(LineInfoSensor(coordinator, line_id))
+
+    if static_entities:
+        async_add_entities(static_entities, update_before_add=True)
+
 
 class CarrisEntity(CoordinatorEntity[CarrisCoordinator], SensorEntity):
     """Base class for Carris Metropolitana entities."""
@@ -388,6 +406,106 @@ class LineVehiclesSensor(CarrisEntity):
             "total_vehicles": len(vehicle_details),
             "vehicles": vehicle_details,
         }
+
+
+class LinesMunicipalitySensor(CarrisEntity, SensorEntity):
+    """Sensor that lists lines serving a municipality."""
+
+    def __init__(self, coordinator: CarrisCoordinator, municipality_id: str) -> None:
+        super().__init__(coordinator, f"lines_mun_{municipality_id}")
+        self._municipality_id = municipality_id
+        self._attr_name = f"Linhas Município {municipality_id}"
+        self._lines: list[dict] = []
+
+    @property
+    def native_value(self) -> int:
+        return len(self._lines)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"lines": self._lines}
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        await self._fetch()
+
+    async def _fetch(self) -> None:
+        try:
+            lines = await self.coordinator.api.get_lines()
+            # Attempt to filter by municipality_id if present on line
+            filtered = [l for l in lines if l.get("municipality_id") == self._municipality_id]
+            if not filtered:
+                # fallback: include lines that reference municipality in name
+                filtered = [l for l in lines if self._municipality_id in (l.get("name") or "")]
+            self._lines = filtered
+            self.async_write_ha_state()
+        except Exception as err:
+            _LOGGER.debug("Error fetching lines for municipality %s: %s", self._municipality_id, err)
+
+
+class StopsMunicipalitySensor(CarrisEntity, SensorEntity):
+    """Sensor that lists stops in a municipality."""
+
+    def __init__(self, coordinator: CarrisCoordinator, municipality_id: str) -> None:
+        super().__init__(coordinator, f"stops_mun_{municipality_id}")
+        self._municipality_id = municipality_id
+        self._attr_name = f"Paragens Município {municipality_id}"
+        self._stops: list[dict] = []
+
+    @property
+    def native_value(self) -> int:
+        return len(self._stops)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"stops": self._stops}
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        await self._fetch()
+
+    async def _fetch(self) -> None:
+        try:
+            stops = await self.coordinator.api.get_stops()
+            filtered = [s for s in stops if s.get("municipality_id") == self._municipality_id]
+            self._stops = filtered
+            self.async_write_ha_state()
+        except Exception as err:
+            _LOGGER.debug("Error fetching stops for municipality %s: %s", self._municipality_id, err)
+
+
+class LineInfoSensor(CarrisEntity, SensorEntity):
+    """Sensor that exposes static info about a line."""
+
+    def __init__(self, coordinator: CarrisCoordinator, line_id: str) -> None:
+        super().__init__(coordinator, f"line_info_{line_id}")
+        self._line_id = line_id
+        self._attr_name = f"Informação Linha {line_id}"
+        self._info: dict[str, Any] = {}
+
+    @property
+    def native_value(self) -> str:
+        return self._info.get("name", "Desconhecido")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return self._info
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        await self._fetch()
+
+    async def _fetch(self) -> None:
+        try:
+            lines = await self.coordinator.api.get_lines()
+            found = next((l for l in lines if str(l.get("id")) == str(self._line_id)), None)
+            if found:
+                self._info = found
+            else:
+                self._info = {}
+            self.async_write_ha_state()
+        except Exception as err:
+            _LOGGER.debug("Error fetching info for line %s: %s", self._line_id, err)
 
 
 class AlertsSensor(CarrisEntity):
