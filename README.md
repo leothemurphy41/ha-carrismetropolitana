@@ -16,6 +16,8 @@ Integração para Home Assistant que monitoriza as linhas, paragens e veículos 
 
 <img width="314" height="365" alt="image" src="https://github.com/user-attachments/assets/d39b26aa-e532-4c26-9f13-82d04c0d5962" />
 
+<img width="1426" height="905" alt="image" src="https://github.com/user-attachments/assets/42d3741e-4bbd-4ddc-a15b-2fa6be7806a1" />
+
 
 ## 📦 Instalação via HACS
 
