@@ -9,7 +9,7 @@ CONF_LINE_IDS = "line_ids"
 CONF_STOP_IDS = "stop_ids"
 
 # Platform
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "binary_sensor", "device_tracker"]
 
 # API settings
 API_BASE_URL = "https://api.carrismetropolitana.pt/v2"
