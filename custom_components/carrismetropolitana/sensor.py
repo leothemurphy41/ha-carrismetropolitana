@@ -38,10 +38,36 @@ async def async_setup_entry(
 
     entities: list[SensorEntity] = []
 
-    # Create stop sensors
+    # Busca todas as paragens para obter coordenadas
+    try:
+        all_stops = await coordinator.api.get_stops()
+        stops_dict = {str(s.get("id")): s for s in all_stops if s.get("id")}
+        _LOGGER.debug("Loaded %s stops from API for coordinates", len(stops_dict))
+    except Exception as err:
+        _LOGGER.warning("Could not fetch stops for coordinates: %s", err)
+        stops_dict = {}
+
+    # Create stop sensors com coordenadas
     for stop_id in coordinator.stop_ids:
-        entities.append(StopArrivalsSensor(coordinator, stop_id))
-        _LOGGER.debug("Added stop sensor for %s", stop_id)
+        stop_data = stops_dict.get(stop_id, {})
+        
+        # Tenta diferentes nomes de campo para coordenadas
+        stop_lat = stop_data.get("lat") or stop_data.get("latitude")
+        stop_lon = stop_data.get("lon") or stop_data.get("longitude")
+        
+        # Se não encontrou, tenta do config_flow
+        if stop_lat is None or stop_lon is None:
+            stop_coords = entry.data.get("stop_coords", {})
+            stop_lat = stop_coords.get(stop_id, {}).get("lat")
+            stop_lon = stop_coords.get(stop_id, {}).get("lon")
+        
+        entities.append(StopArrivalsSensor(coordinator, stop_id, stop_lat, stop_lon))
+        _LOGGER.debug(
+            "Added stop sensor for %s (lat: %s, lon: %s)",
+            stop_id,
+            stop_lat,
+            stop_lon
+        )
 
     # Create line sensors
     for line_id in coordinator.line_ids:
@@ -99,18 +125,37 @@ class CarrisEntity(CoordinatorEntity[CarrisCoordinator], SensorEntity):
 class StopArrivalsSensor(CarrisEntity):
     """Sensor showing next arrivals at a stop."""
 
-    def __init__(self, coordinator: CarrisCoordinator, stop_id: str) -> None:
+    def __init__(self, coordinator: CarrisCoordinator, stop_id: str, stop_lat: float = None, stop_lon: float = None) -> None:
         """Initialize the stop arrivals sensor."""
         super().__init__(coordinator, f"stop_{stop_id}")
         self._stop_id = stop_id
+        self._stop_lat = stop_lat
+        self._stop_lon = stop_lon
         self._attr_name = f"Carris Paragem {stop_id}"
         self._attr_icon = "mdi:bus-stop"
 
         _LOGGER.debug(
-            "StopArrivalsSensor initialized for stop %s with unique_id: %s",
+            "StopArrivalsSensor initialized for stop %s (lat: %s, lon: %s)",
             stop_id,
-            self._attr_unique_id,
+            stop_lat,
+            stop_lon,
         )
+
+    # ⭐ PROPRIEDADES PARA O MAPA
+    @property
+    def latitude(self) -> float | None:
+        """Return latitude for map."""
+        return self._stop_lat
+
+    @property
+    def longitude(self) -> float | None:
+        """Return longitude for map."""
+        return self._stop_lon
+
+    @property
+    def source_type(self) -> str:
+        """Return source type for map."""
+        return "gps"
 
     @property
     def available(self) -> bool:
@@ -161,6 +206,8 @@ class StopArrivalsSensor(CarrisEntity):
         if not self.coordinator.data:
             return {
                 "stop_id": self._stop_id,
+                "latitude": self._stop_lat,
+                "longitude": self._stop_lon,
                 "status": "A carregar dados...",
                 "next_arrivals": [],
             }
@@ -169,6 +216,8 @@ class StopArrivalsSensor(CarrisEntity):
 
         attrs: dict[str, Any] = {
             "stop_id": self._stop_id,
+            "latitude": self._stop_lat,
+            "longitude": self._stop_lon,
             "total_arrivals": len(arrivals),
             "next_arrivals": [],
         }
