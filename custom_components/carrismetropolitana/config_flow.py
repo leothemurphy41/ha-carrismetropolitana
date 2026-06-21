@@ -30,6 +30,7 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._stops: dict[str, str] = {}
         self._selected_municipalities: list[str] = []
         self._selected_lines: list[str] = []
+        self._stop_coords: dict[str, dict] = {}
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -191,6 +192,8 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.debug("Got %s total stops", len(all_stops))
 
                 self._stops = {}
+                self._stop_coords = {}
+                
                 for stop in all_stops:
                     stop_id = stop.get("id")
                     if not stop_id:
@@ -205,11 +208,22 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             or stop_id
                         )
                         self._stops[stop_id] = f"{name} ({stop_id})"
+                        
+                        # Guardar coordenadas para uso posterior
+                        lat = stop.get("lat") or stop.get("latitude")
+                        lon = stop.get("lon") or stop.get("longitude")
+                        if lat is not None and lon is not None:
+                            self._stop_coords[stop_id] = {"lat": lat, "lon": lon}
+                        
                         _LOGGER.debug("Added stop: %s - %s", stop_id, name)
 
+                # ⚠️ ALTERAÇÃO CRÍTICA: Já não bloqueia se não houver paragens
                 if not self._stops:
-                    _LOGGER.warning("No stops found for selected municipalities")
-                    errors["base"] = "no_stops_found"
+                    _LOGGER.warning(
+                        "No stops found for selected municipalities. "
+                        "User can continue without selecting stops."
+                    )
+                    # Em vez de erro, apenas avisamos e permitimos continuar
 
             except Exception as err:
                 _LOGGER.exception("Error fetching stops: %s", err)
@@ -236,10 +250,33 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_MUNICIPALITY_IDS: self._selected_municipalities,
                     CONF_LINE_IDS: self._selected_lines,
                     CONF_STOP_IDS: selected_stops,
+                    "stop_coords": self._stop_coords,  # Guardar coordenadas
                 },
             )
 
-        # Build form
+        # ⚠️ ALTERAÇÃO CRÍTICA: Schema adaptado para permitir avançar sem paragens
+        # Se não há paragens, mostramos um multi-select vazio mas permitimos continuar
+        if not self._stops:
+            # Caso especial: sem paragens - permitir continuar
+            _LOGGER.info("No stops available. Allowing user to continue without stop selection.")
+            
+            # Mostrar formulário com aviso
+            return self.async_show_form(
+                step_id="stops",
+                data_schema=vol.Schema(
+                    {
+                        vol.Optional(CONF_STOP_IDS, default=[]): cv.multi_select({}),
+                    }
+                ),
+                errors=errors,
+                description_placeholders={
+                    "warning": "⚠️ Nenhuma paragem encontrada para os municípios selecionados. "
+                               "Pode continuar sem selecionar paragens. "
+                               "Poderá adicionar paragens mais tarde nas opções."
+                },
+            )
+
+        # Caso normal: com paragens
         schema = vol.Schema(
             {
                 vol.Optional(CONF_STOP_IDS, default=[]): cv.multi_select(
