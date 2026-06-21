@@ -141,7 +141,6 @@ class StopArrivalsSensor(CarrisEntity):
             stop_lon,
         )
 
-    # ⭐ PROPRIEDADES PARA O MAPA
     @property
     def latitude(self) -> float | None:
         """Return latitude for map."""
@@ -186,13 +185,11 @@ class StopArrivalsSensor(CarrisEntity):
             scheduled = first_arrival.get("scheduled_arrival")
             observed = first_arrival.get("observed_arrival")
 
-            # Prefer observed > estimated > scheduled
             value = observed or estimated or scheduled
             
             if value:
                 return value
             
-            # Se não houver horário, mostra o número de chegadas
             result = f"{len(arrivals)} chegadas"
             _LOGGER.debug("Stop %s: Returning fallback value: %s", self._stop_id, result)
             return result
@@ -222,7 +219,6 @@ class StopArrivalsSensor(CarrisEntity):
             "next_arrivals": [],
         }
 
-        # Add up to ARRIVALS_TO_SHOW arrivals
         for idx, arrival in enumerate(arrivals[:ARRIVALS_TO_SHOW], 1):
             arrival_data = {
                 "position": idx,
@@ -232,7 +228,6 @@ class StopArrivalsSensor(CarrisEntity):
                 "vehicle_id": arrival.get("vehicle_id"),
             }
 
-            # Add time information
             estimated = arrival.get("estimated_arrival")
             scheduled = arrival.get("scheduled_arrival")
             observed = arrival.get("observed_arrival")
@@ -244,14 +239,12 @@ class StopArrivalsSensor(CarrisEntity):
             if observed:
                 arrival_data["observed_arrival"] = observed
 
-            # Add delay if available
             delay = arrival.get("delay")
             if delay is not None:
                 arrival_data["delay_seconds"] = delay
 
             attrs["next_arrivals"].append(arrival_data)
 
-        # Set first arrival as main attributes for easy access
         if arrivals:
             first = arrivals[0]
             attrs["line"] = first.get("line_id")
@@ -287,12 +280,10 @@ class StopArrivalsSensor(CarrisEntity):
             if not isinstance(arrival, dict):
                 continue
 
-            # Try to get UNIX timestamps
             estimated_unix = arrival.get("estimated_arrival_unix")
             scheduled_unix = arrival.get("scheduled_arrival_unix")
             observed_unix = arrival.get("observed_arrival_unix")
 
-            # Use the most reliable timestamp available
             unix = observed_unix or estimated_unix or scheduled_unix
 
             if unix is not None:
@@ -307,7 +298,6 @@ class StopArrivalsSensor(CarrisEntity):
                             now_unix,
                         )
                 except (ValueError, TypeError):
-                    # Fallback: try with string comparison
                     scheduled = arrival.get("scheduled_arrival", "")
                     estimated = arrival.get("estimated_arrival", "")
                     compare_time = estimated or scheduled
@@ -317,7 +307,6 @@ class StopArrivalsSensor(CarrisEntity):
                         if compare_time >= current_time:
                             upcoming.append(arrival)
             else:
-                # Fallback: use string time comparison
                 scheduled = arrival.get("scheduled_arrival", "")
                 estimated = arrival.get("estimated_arrival", "")
                 compare_time = estimated or scheduled
@@ -327,10 +316,8 @@ class StopArrivalsSensor(CarrisEntity):
                     if compare_time >= current_time:
                         upcoming.append(arrival)
 
-        # Sort by time (prefer UNIX timestamps)
         def sort_key(arrival: dict) -> str:
             """Sort key for arrivals."""
-            # Try UNIX timestamps first
             unix = (
                 arrival.get("observed_arrival_unix")
                 or arrival.get("estimated_arrival_unix")
@@ -339,7 +326,6 @@ class StopArrivalsSensor(CarrisEntity):
             if unix is not None:
                 return str(unix)
 
-            # Fallback to string comparison
             return (
                 arrival.get("estimated_arrival")
                 or arrival.get("scheduled_arrival")
@@ -430,7 +416,6 @@ class LineVehiclesSensor(CarrisEntity):
                 "lon": v.get("lon"),
             }
 
-            # Add optional fields if available
             if v.get("speed") is not None:
                 detail["speed"] = v.get("speed")
             if v.get("bearing") is not None:
@@ -457,7 +442,7 @@ class LineVehiclesSensor(CarrisEntity):
         }
 
 
-class LinesMunicipalitySensor(CarrisEntity, SensorEntity):
+class LinesMunicipalitySensor(CarrisEntity):
     """Sensor that lists lines serving a municipality."""
 
     def __init__(self, coordinator: CarrisCoordinator, municipality_id: str) -> None:
@@ -481,10 +466,8 @@ class LinesMunicipalitySensor(CarrisEntity, SensorEntity):
     async def _fetch(self) -> None:
         try:
             lines = await self.coordinator.api.get_lines()
-            # Attempt to filter by municipality_id if present on line
             filtered = [l for l in lines if l.get("municipality_id") == self._municipality_id]
             if not filtered:
-                # fallback: include lines that reference municipality in name
                 filtered = [l for l in lines if self._municipality_id in (l.get("name") or "")]
             self._lines = filtered
             self.async_write_ha_state()
@@ -492,7 +475,7 @@ class LinesMunicipalitySensor(CarrisEntity, SensorEntity):
             _LOGGER.debug("Error fetching lines for municipality %s: %s", self._municipality_id, err)
 
 
-class StopsMunicipalitySensor(CarrisEntity, SensorEntity):
+class StopsMunicipalitySensor(CarrisEntity):
     """Sensor that lists stops in a municipality."""
 
     def __init__(self, coordinator: CarrisCoordinator, municipality_id: str) -> None:
@@ -523,7 +506,7 @@ class StopsMunicipalitySensor(CarrisEntity, SensorEntity):
             _LOGGER.debug("Error fetching stops for municipality %s: %s", self._municipality_id, err)
 
 
-class LineInfoSensor(CarrisEntity, SensorEntity):
+class LineInfoSensor(CarrisEntity):
     """Sensor that exposes static info about a line."""
 
     def __init__(self, coordinator: CarrisCoordinator, line_id: str) -> None:
@@ -562,7 +545,7 @@ class AlertsSensor(CarrisEntity):
 
     def __init__(self, coordinator: CarrisCoordinator) -> None:
         """Initialize the alerts sensor."""
-        super().__init__(coordinator, f"alerts_{id(coordinator)}")
+        super().__init__(coordinator, "alerts_sensor")
         self._attr_name = "Carris Alertas"
         self._attr_icon = "mdi:alert-circle"
         self._attr_state_class = SensorStateClass.MEASUREMENT
@@ -617,15 +600,12 @@ class AlertsSensor(CarrisEntity):
             if not isinstance(alert, dict):
                 continue
 
-            # Try to extract alert data
             alert_data = alert.get("alert", alert)
 
-            # Extract header text
             header_text = alert_data.get("header_text")
             if isinstance(header_text, dict):
                 translations = header_text.get("translation", [])
                 if isinstance(translations, list):
-                    # Find Portuguese translation
                     pt_text = next(
                         (
                             t.get("text", "")
@@ -634,7 +614,6 @@ class AlertsSensor(CarrisEntity):
                         ),
                         "",
                     )
-                    # Fallback to first translation
                     if not pt_text and translations:
                         pt_text = translations[0].get("text", "")
                     header = str(pt_text) if pt_text else ""
@@ -643,7 +622,6 @@ class AlertsSensor(CarrisEntity):
             else:
                 header = str(header_text) if header_text is not None else ""
 
-            # Extract description
             description_text = alert_data.get("description_text")
             if isinstance(description_text, dict):
                 translations = description_text.get("translation", [])
@@ -664,7 +642,6 @@ class AlertsSensor(CarrisEntity):
             else:
                 description = str(description_text) if description_text is not None else ""
 
-            # Build summary
             summary = {}
             if header:
                 summary["header"] = header
