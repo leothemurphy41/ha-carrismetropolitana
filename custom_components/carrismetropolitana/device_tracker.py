@@ -5,117 +5,177 @@ import logging
 from typing import Any
 
 from homeassistant.components.device_tracker import SourceType, TrackerEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import CarrisCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
+async def async_setup_entry(hass, entry, async_add_entities):
     """Set up vehicle device trackers for configured lines."""
-    coordinator: CarrisCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = hass.data[DOMAIN][entry.entry_id]
 
-    # Criar um tracker por linha em vez de por veículo
-    # Isto evita o problema de entidades dinâmicas
-    entities = []
-    for line_id in coordinator.line_ids:
-        entities.append(LineVehicleTracker(coordinator, line_id))
-        _LOGGER.debug("Added vehicle tracker for line %s", line_id)
+    trackers: dict[str, VehicleTracker] = {}
 
-    if entities:
-        async_add_entities(entities, update_before_add=True)
+    vehicles_by_line = coordinator.data.get("vehicles", {}) if coordinator.data else {}
+
+    initial_entities: list[TrackerEntity] = []
+
+    for line_id, vehicles in vehicles_by_line.items():
+        for vehicle in vehicles:
+            vehicle_id = vehicle.get("id") or vehicle.get("vehicle_id")
+            if not vehicle_id:
+                continue
+            vt = VehicleTracker(coordinator, str(vehicle_id), line_id)
+            trackers[str(vehicle_id)] = vt
+            initial_entities.append(vt)
+
+    if initial_entities:
+        async_add_entities(initial_entities)
+
+    async def _handle_coordinator_update() -> None:
+        """Handle coordinator updates - add new vehicles and update existing ones."""
+        vehicles_now = coordinator.data.get("vehicles", {}) if coordinator.data else {}
+        found_ids: set[str] = set()
+
+        new_entities: list[TrackerEntity] = []
+        for line_id, vehicles in vehicles_now.items():
+            for vehicle in vehicles:
+                vid = vehicle.get("id") or vehicle.get("vehicle_id")
+                if not vid:
+                    continue
+                vid = str(vid)
+                found_ids.add(vid)
+                if vid not in trackers:
+                    _LOGGER.debug("Adding new vehicle tracker for %s on line %s", vid, line_id)
+                    vt = VehicleTracker(coordinator, vid, line_id)
+                    trackers[vid] = vt
+                    new_entities.append(vt)
+
+        if new_entities:
+            async_add_entities(new_entities, update_before_add=True)
+
+        for vid, tracker in trackers.items():
+            vehicle_exists = False
+            for line_id, vehicles in vehicles_now.items():
+                for vehicle in vehicles:
+                    v_id = vehicle.get("id") or vehicle.get("vehicle_id")
+                    if str(v_id) == vid:
+                        vehicle_exists = True
+                        break
+                if vehicle_exists:
+                    break
+
+            if vehicle_exists:
+                tracker.async_update_ha_state()
+            else:
+                tracker._update_from_data(None)
+                tracker.async_write_ha_state()
+
+    coordinator.async_add_listener(_handle_coordinator_update)
 
 
-class LineVehicleTracker(CoordinatorEntity[CarrisCoordinator], TrackerEntity):
-    """Tracker showing position of the first active vehicle on a line."""
+class VehicleTracker(CoordinatorEntity, TrackerEntity):
+    """Tracker for a single vehicle."""
 
-    def __init__(self, coordinator: CarrisCoordinator, line_id: str) -> None:
-        """Initialize the tracker."""
+    def __init__(self, coordinator, vehicle_id: str, line_id: str) -> None:
         super().__init__(coordinator)
+        self._vehicle_id = str(vehicle_id)
         self._line_id = line_id
-        self._attr_name = f"Carris Veículo Linha {line_id}"
-        self._attr_unique_id = f"{DOMAIN}_tracker_line_{line_id}"
+        self._attr_name = f"Veículo {self._vehicle_id}"
+        self._attr_unique_id = f"{DOMAIN}_vehicle_{self._vehicle_id}"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, "carrismetropolitana")},
-            name="Carris Metropolitana",
+            identifiers={(DOMAIN, f"vehicle_{self._vehicle_id}")},
+            name=f"Carris Veículo {self._vehicle_id}",
             manufacturer="Carris Metropolitana",
-            model="API v2",
-            configuration_url="https://www.carrismetropolitana.pt",
+            model="Vehicle Tracker",
         )
-        self._attr_icon = "mdi:bus"
 
-    def _get_first_vehicle(self) -> dict | None:
-        """Get the first active vehicle for this line."""
+        self._lat: float | None = None
+        self._lon: float | None = None
+        self._attrs: dict[str, Any] = {}
+
+        self._update_from_data(self._find_vehicle_data())
+
+    def _find_vehicle_data(self) -> dict | None:
+        """Find vehicle data in coordinator."""
         if not self.coordinator.data:
             return None
+
         vehicles = self.coordinator.data.get("vehicles", {}).get(self._line_id, [])
-        if vehicles and isinstance(vehicles, list):
-            return vehicles[0]
+        for v in vehicles:
+            vid = v.get("id") or v.get("vehicle_id")
+            if str(vid) == self._vehicle_id:
+                return v
         return None
+
+    def _update_from_data(self, vehicle_data: dict | None) -> None:
+        """Update tracker state from vehicle data."""
+        if vehicle_data:
+            try:
+                lat = vehicle_data.get("lat")
+                lon = vehicle_data.get("lon")
+                self._lat = float(lat) if lat is not None else None
+                self._lon = float(lon) if lon is not None else None
+            except (TypeError, ValueError):
+                self._lat = None
+                self._lon = None
+
+            self._attrs = {
+                "line_id": vehicle_data.get("line_id"),
+                "speed": vehicle_data.get("speed"),
+                "bearing": vehicle_data.get("bearing"),
+                "current_stop": vehicle_data.get("stop_id"),
+                "vehicle_id": self._vehicle_id,
+            }
+
+            if vehicle_data.get("license_plate"):
+                self._attrs["license_plate"] = vehicle_data.get("license_plate")
+            if vehicle_data.get("model"):
+                self._attrs["model"] = vehicle_data.get("model")
+            if vehicle_data.get("wheelchair_accessible") is not None:
+                self._attrs["wheelchair_accessible"] = vehicle_data.get("wheelchair_accessible")
+            if vehicle_data.get("timestamp"):
+                self._attrs["timestamp"] = vehicle_data.get("timestamp")
+        else:
+            self._lat = None
+            self._lon = None
+            self._attrs = {"status": "unavailable", "vehicle_id": self._vehicle_id}
 
     @property
     def latitude(self) -> float | None:
-        """Return latitude."""
-        vehicle = self._get_first_vehicle()
-        if not vehicle:
-            return None
-        try:
-            return float(vehicle.get("lat"))
-        except (TypeError, ValueError):
-            return None
+        """Return latitude for tracking."""
+        return self._lat
 
     @property
     def longitude(self) -> float | None:
-        """Return longitude."""
-        vehicle = self._get_first_vehicle()
-        if not vehicle:
-            return None
-        try:
-            return float(vehicle.get("lon"))
-        except (TypeError, ValueError):
-            return None
+        """Return longitude for tracking."""
+        return self._lon
 
     @property
     def source_type(self) -> SourceType:
-        """Return source type."""
+        """Return source type for tracking."""
         return SourceType.GPS
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.data is not None and self._get_first_vehicle() is not None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra attributes."""
-        vehicle = self._get_first_vehicle()
-        if not vehicle:
-            return {"line_id": self._line_id, "status": "Sem veículos"}
+        return self._attrs
 
-        attrs: dict[str, Any] = {
-            "line_id": self._line_id,
-            "vehicle_id": vehicle.get("id"),
-            "speed": vehicle.get("speed"),
-            "bearing": vehicle.get("bearing"),
-            "current_stop": vehicle.get("stop_id"),
-            "status": vehicle.get("current_status"),
-        }
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self._lat is not None and self._lon is not None
 
-        if vehicle.get("license_plate"):
-            attrs["license_plate"] = vehicle.get("license_plate")
-        if vehicle.get("model"):
-            attrs["model"] = vehicle.get("model")
-        if vehicle.get("wheelchair_accessible") is not None:
-            attrs["wheelchair_accessible"] = vehicle.get("wheelchair_accessible")
+    def _handle_coordinator_update(self) -> None:
+        """Update tracker state from coordinator data."""
+        _LOGGER.debug(
+            "Updating vehicle tracker %s from coordinator",
+            self._vehicle_id
+        )
 
-        return attrs
+        vehicle_data = self._find_vehicle_data()
+        self._update_from_data(vehicle_data)
+        self.async_write_ha_state()
