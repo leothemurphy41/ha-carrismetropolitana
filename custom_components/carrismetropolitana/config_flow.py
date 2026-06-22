@@ -40,7 +40,6 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         _LOGGER.debug("Step user - user_input: %s", user_input)
 
-        # Load municipalities if not loaded
         if not self._municipalities:
             session = async_get_clientsession(self.hass)
             api = CarrisMetropolitanaAPI(session)
@@ -50,7 +49,6 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 municipalities = await api.get_municipalities()
                 _LOGGER.debug("Got %s municipalities", len(municipalities))
 
-                # Build mapping: id -> name
                 self._municipalities = {}
                 for m in municipalities:
                     mid = m.get("id")
@@ -66,7 +64,6 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Error fetching municipalities: %s", err)
                 errors["base"] = "cannot_connect"
 
-        # Handle form submission
         if user_input is not None and not errors:
             self._selected_municipalities = user_input.get(CONF_MUNICIPALITY_IDS, [])
             _LOGGER.debug(
@@ -80,7 +77,6 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 return await self.async_step_lines()
 
-        # Build form
         schema = vol.Schema(
             {
                 vol.Required(
@@ -90,7 +86,7 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     dict(
                         sorted(
                             self._municipalities.items(),
-                            key=lambda x: x[1],  # Sort by name
+                            key=lambda x: x[1],
                         )
                     )
                 ),
@@ -111,7 +107,6 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         _LOGGER.debug("Step lines - user_input: %s", user_input)
 
-        # Load lines if not loaded
         if not self._lines:
             session = async_get_clientsession(self.hass)
             api = CarrisMetropolitanaAPI(session)
@@ -127,7 +122,6 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     if not line_id:
                         continue
 
-                    # Check if line belongs to selected municipalities
                     mun_ids = line.get("municipality_ids", [])
                     if any(mid in self._selected_municipalities for mid in mun_ids):
                         short_name = line.get("short_name", line_id)
@@ -144,23 +138,21 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Error fetching lines: %s", err)
                 errors["base"] = "cannot_connect"
 
-        # Handle form submission
         if user_input is not None and not errors:
             self._selected_lines = user_input.get(CONF_LINE_IDS, [])
             _LOGGER.debug("Selected %s lines", len(self._selected_lines))
             return await self.async_step_stops()
 
-        # Build form
         schema = vol.Schema(
             {
                 vol.Required(
                     CONF_LINE_IDS,
-                    default=list(self._lines.keys())[:10],  # Select first 10 by default
+                    default=list(self._lines.keys())[:10],
                 ): cv.multi_select(
                     dict(
                         sorted(
                             self._lines.items(),
-                            key=lambda x: x[1],  # Sort by label
+                            key=lambda x: x[1],
                         )
                     )
                 ),
@@ -181,7 +173,6 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         _LOGGER.debug("Step stops - user_input: %s", user_input)
 
-        # Load stops if not loaded
         if not self._stops:
             session = async_get_clientsession(self.hass)
             api = CarrisMetropolitanaAPI(session)
@@ -193,7 +184,7 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 self._stops = {}
                 self._stop_coords = {}
-                
+
                 for stop in all_stops:
                     stop_id = stop.get("id")
                     if not stop_id:
@@ -208,28 +199,24 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             or stop_id
                         )
                         self._stops[stop_id] = f"{name} ({stop_id})"
-                        
-                        # Guardar coordenadas para uso posterior
+
                         lat = stop.get("lat") or stop.get("latitude")
                         lon = stop.get("lon") or stop.get("longitude")
                         if lat is not None and lon is not None:
                             self._stop_coords[stop_id] = {"lat": lat, "lon": lon}
-                        
+
                         _LOGGER.debug("Added stop: %s - %s", stop_id, name)
 
-                # ⚠️ ALTERAÇÃO CRÍTICA: Já não bloqueia se não houver paragens
                 if not self._stops:
                     _LOGGER.warning(
                         "No stops found for selected municipalities. "
                         "User can continue without selecting stops."
                     )
-                    # Em vez de erro, apenas avisamos e permitimos continuar
 
             except Exception as err:
                 _LOGGER.exception("Error fetching stops: %s", err)
                 errors["base"] = "cannot_connect"
 
-        # Handle form submission
         if user_input is not None and not errors:
             selected_stops = user_input.get(CONF_STOP_IDS, [])
             _LOGGER.debug("Selected %s stops", len(selected_stops))
@@ -250,17 +237,12 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_MUNICIPALITY_IDS: self._selected_municipalities,
                     CONF_LINE_IDS: self._selected_lines,
                     CONF_STOP_IDS: selected_stops,
-                    "stop_coords": self._stop_coords,  # Guardar coordenadas
+                    "stop_coords": self._stop_coords,
                 },
             )
 
-        # ⚠️ ALTERAÇÃO CRÍTICA: Schema adaptado para permitir avançar sem paragens
-        # Se não há paragens, mostramos um multi-select vazio mas permitimos continuar
         if not self._stops:
-            # Caso especial: sem paragens - permitir continuar
             _LOGGER.info("No stops available. Allowing user to continue without stop selection.")
-            
-            # Mostrar formulário com aviso
             return self.async_show_form(
                 step_id="stops",
                 data_schema=vol.Schema(
@@ -270,20 +252,17 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 errors=errors,
                 description_placeholders={
-                    "warning": "⚠️ Nenhuma paragem encontrada para os municípios selecionados. "
-                               "Pode continuar sem selecionar paragens. "
-                               "Poderá adicionar paragens mais tarde nas opções."
+                    "warning": "⚠️ Nenhuma paragem encontrada para os municípios selecionados."
                 },
             )
 
-        # Caso normal: com paragens
         schema = vol.Schema(
             {
                 vol.Optional(CONF_STOP_IDS, default=[]): cv.multi_select(
                     dict(
                         sorted(
                             self._stops.items(),
-                            key=lambda x: x[1],  # Sort by label
+                            key=lambda x: x[1],
                         )
                     )
                 ),
@@ -300,27 +279,18 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
-    ) -> OptionsFlow:
+    ) -> "OptionsFlow":
         """Return the options flow."""
-        return OptionsFlow(config_entry)
+        return OptionsFlow()
 
 
 class OptionsFlow(config_entries.OptionsFlow):
     """Options flow to update configuration."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+    def __init__(self) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
         self._lines: dict[str, str] = {}
         self._stops: dict[str, str] = {}
-        self._selected_municipalities: list[str] = list(
-            config_entry.data.get(CONF_MUNICIPALITY_IDS, [])
-        )
-
-        _LOGGER.debug(
-            "OptionsFlow initialized with municipalities: %s",
-            self._selected_municipalities,
-        )
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -330,27 +300,16 @@ class OptionsFlow(config_entries.OptionsFlow):
 
         _LOGGER.debug("Options step init - user_input: %s", user_input)
 
-        # Load data if not loaded
+        # Aceder ao config_entry via self.config_entry (injectado pelo HA)
+        selected_municipalities = list(
+            self.config_entry.data.get(CONF_MUNICIPALITY_IDS, [])
+        )
+
         if not self._lines:
             session = async_get_clientsession(self.hass)
             api = CarrisMetropolitanaAPI(session)
 
             try:
-                # Get current selections
-                current_lines = self.config_entry.options.get(
-                    CONF_LINE_IDS, self.config_entry.data.get(CONF_LINE_IDS, [])
-                )
-                current_stops = self.config_entry.options.get(
-                    CONF_STOP_IDS, self.config_entry.data.get(CONF_STOP_IDS, [])
-                )
-
-                _LOGGER.debug(
-                    "Current selections - Lines: %s, Stops: %s",
-                    len(current_lines),
-                    len(current_stops),
-                )
-
-                # Fetch all lines
                 _LOGGER.debug("Fetching lines for options...")
                 all_lines = await api.get_lines()
                 self._lines = {}
@@ -361,7 +320,7 @@ class OptionsFlow(config_entries.OptionsFlow):
                         continue
 
                     mun_ids = line.get("municipality_ids", [])
-                    if any(mid in self._selected_municipalities for mid in mun_ids):
+                    if any(mid in selected_municipalities for mid in mun_ids):
                         short_name = line.get("short_name", line_id)
                         long_name = line.get("long_name", "")
                         label = f"{short_name} — {long_name}"[:80] if long_name else short_name
@@ -369,7 +328,6 @@ class OptionsFlow(config_entries.OptionsFlow):
 
                 _LOGGER.debug("Loaded %s lines for options", len(self._lines))
 
-                # Fetch all stops
                 _LOGGER.debug("Fetching stops for options...")
                 all_stops = await api.get_stops()
                 self._stops = {}
@@ -379,7 +337,7 @@ class OptionsFlow(config_entries.OptionsFlow):
                     if not stop_id:
                         continue
 
-                    if stop.get("municipality_id") in self._selected_municipalities:
+                    if stop.get("municipality_id") in selected_municipalities:
                         name = (
                             stop.get("long_name")
                             or stop.get("name")
@@ -394,7 +352,6 @@ class OptionsFlow(config_entries.OptionsFlow):
                 _LOGGER.exception("Error in options flow: %s", err)
                 errors["base"] = "cannot_connect"
 
-        # Handle form submission
         if user_input is not None and not errors:
             new_lines = user_input.get(CONF_LINE_IDS, [])
             new_stops = user_input.get(CONF_STOP_IDS, [])
@@ -413,7 +370,6 @@ class OptionsFlow(config_entries.OptionsFlow):
                 },
             )
 
-        # Get current values
         current_lines = self.config_entry.options.get(
             CONF_LINE_IDS, self.config_entry.data.get(CONF_LINE_IDS, [])
         )
@@ -421,7 +377,6 @@ class OptionsFlow(config_entries.OptionsFlow):
             CONF_STOP_IDS, self.config_entry.data.get(CONF_STOP_IDS, [])
         )
 
-        # Build form
         schema = vol.Schema(
             {
                 vol.Required(CONF_LINE_IDS, default=current_lines): cv.multi_select(
