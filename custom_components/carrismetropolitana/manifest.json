@@ -1,7 +1,7 @@
 {
   "domain": "carrismetropolitana",
   "name": "Carris Metropolitana",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "documentation": "https://github.com/leothemurphy41/ha-carrismetropolitana",
   "issue_tracker": "https://github.com/leothemurphy41/ha-carrismetropolitana/issues",
   "codeowners": ["@leothemurphy41"],
