@@ -48,83 +48,47 @@ class CarrisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             len(self.stop_ids),
         )
 
-    async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch data from the API in parallel."""
-        _LOGGER.info("🔄 Starting Carris data update...")
+async def _async_update_data(self) -> dict[str, Any]:
+    """Fetch data from the API in parallel."""
+    _LOGGER.info("Starting Carris data update...")
 
-        try:
-            tasks = {}
-            
-            # 1. Fetch arrivals for all stops (parallel)
-            if self.stop_ids:
-                tasks["arrivals"] = self._fetch_all_arrivals()
-                _LOGGER.debug("Created arrivals task for %s stops", len(self.stop_ids))
-            else:
-                tasks["arrivals"] = asyncio.sleep(0, result={})
-            
-            # 2. Fetch vehicles
-            if self.line_ids:
-                tasks["vehicles"] = self._fetch_vehicles()
-                _LOGGER.debug("Created vehicles task for %s lines", len(self.line_ids))
-            else:
-                tasks["vehicles"] = asyncio.sleep(0, result={})
-            
-            # 3. Fetch alerts
-            tasks["alerts"] = self._fetch_alerts()
-            _LOGGER.debug("Created alerts task")
+    try:
+        results = await asyncio.gather(
+            self._fetch_all_arrivals(),
+            self._fetch_vehicles(),
+            self._fetch_alerts(),
+            return_exceptions=True,
+        )
 
-            # Execute all tasks in parallel. Each API request already has its own timeout.
-            _LOGGER.debug("Executing %s tasks", len(tasks))
-            results = await asyncio.gather(*tasks.values(), return_exceptions=True)
-            _LOGGER.debug("All tasks completed, processing results")
+        arrivals_result, vehicles_result, alerts_result = results
 
-            # Process results
-            data = {}
-            _LOGGER.debug("Processing %s results from tasks", len(results))
-            for key, result in zip(tasks.keys(), results):
-                if isinstance(result, Exception):
-                    _LOGGER.error("Error fetching %s: %s", key, result)
-                    data[key] = {} if key != "alerts" else []
-                else:
-                    data[key] = result
-                    _LOGGER.debug("Successfully fetched %s: %s items", key, 
-                                 len(result) if isinstance(result, dict) else len(result) if isinstance(result, list) else "unknown")
+        data = {
+            "arrivals": arrivals_result if not isinstance(arrivals_result, Exception) else {},
+            "vehicles": vehicles_result if not isinstance(vehicles_result, Exception) else {},
+            "alerts": alerts_result if not isinstance(alerts_result, Exception) else [],
+        }
 
-            # Log status
-            try:
-                total_arrivals = sum(len(v) for v in data.get("arrivals", {}).values())
-            except Exception as e:
-                _LOGGER.error("Error calculating arrivals count: %s", e)
-                total_arrivals = 0
-            
-            try:
-                total_vehicles = sum(len(v) for v in data.get("vehicles", {}).values())
-            except Exception as e:
-                _LOGGER.error("Error calculating vehicles count: %s", e)
-                total_vehicles = 0
-            
-            try:
-                total_alerts = len(data.get("alerts", []))
-            except Exception as e:
-                _LOGGER.error("Error calculating alerts count: %s", e)
-                total_alerts = 0
-            
-            _LOGGER.info(
-                "Update complete - Arrivals: %s, Vehicles: %s, Alerts: %s",
-                total_arrivals,
-                total_vehicles,
-                total_alerts,
-            )
+        if isinstance(arrivals_result, Exception):
+            _LOGGER.error("Error fetching arrivals: %s", arrivals_result)
+        if isinstance(vehicles_result, Exception):
+            _LOGGER.error("Error fetching vehicles: %s", vehicles_result)
+        if isinstance(alerts_result, Exception):
+            _LOGGER.error("Error fetching alerts: %s", alerts_result)
 
-            return data
+        total_arrivals = sum(len(v) for v in data["arrivals"].values())
+        total_vehicles = sum(len(v) for v in data["vehicles"].values())
+        total_alerts = len(data["alerts"])
 
-        except asyncio.TimeoutError:
-            _LOGGER.error("Data update timed out after %s seconds", TIMEOUT)
-            raise UpdateFailed(f"Update timed out after {TIMEOUT} seconds")
+        _LOGGER.info(
+            "Update complete - Arrivals: %s, Vehicles: %s, Alerts: %s",
+            total_arrivals, total_vehicles, total_alerts,
+        )
 
-        except Exception as err:
-            _LOGGER.exception("Unexpected error during data update: %s", err)
-            raise UpdateFailed(f"Error communicating with Carris Metropolitana API: {err}") from err
+        return data
+
+    except Exception as err:
+        _LOGGER.exception("Unexpected error during data update: %s", err)
+        raise UpdateFailed(f"Error communicating with Carris Metropolitana API: {err}") from err
 
     async def _fetch_all_arrivals(self) -> dict[str, list[dict]]:
         """Fetch arrivals for all stops in parallel."""
