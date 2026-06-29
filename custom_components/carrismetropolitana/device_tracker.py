@@ -35,46 +35,42 @@ async def async_setup_entry(hass, entry, async_add_entities):
     if initial_entities:
         async_add_entities(initial_entities)
 
-    async def _handle_coordinator_update() -> None:
-        """Handle coordinator updates - add new vehicles and update existing ones."""
-        vehicles_now = coordinator.data.get("vehicles", {}) if coordinator.data else {}
-        found_ids: set[str] = set()
+async def _handle_coordinator_update() -> None:
+    """Handle coordinator updates - add new vehicles and update existing ones."""
+    vehicles_now = coordinator.data.get("vehicles", {}) if coordinator.data else {}
 
-        new_entities: list[TrackerEntity] = []
-        for line_id, vehicles in vehicles_now.items():
-            for vehicle in vehicles:
-                vid = vehicle.get("id") or vehicle.get("vehicle_id")
-                if not vid:
-                    continue
-                vid = str(vid)
-                found_ids.add(vid)
-                if vid not in trackers:
-                    _LOGGER.debug("Adding new vehicle tracker for %s on line %s", vid, line_id)
-                    vt = VehicleTracker(coordinator, vid, line_id)
-                    trackers[vid] = vt
-                    new_entities.append(vt)
+    # Build set of current vehicle IDs
+    current_ids: set[str] = set()
+    for line_id, vehicles in vehicles_now.items():
+        for vehicle in vehicles:
+            vid = vehicle.get("id") or vehicle.get("vehicle_id")
+            if vid:
+                current_ids.add(str(vid))
 
-        if new_entities:
-            async_add_entities(new_entities, update_before_add=True)
+    # Add new vehicles
+    new_entities: list[TrackerEntity] = []
+    for line_id, vehicles in vehicles_now.items():
+        for vehicle in vehicles:
+            vid = vehicle.get("id") or vehicle.get("vehicle_id")
+            if not vid:
+                continue
+            vid = str(vid)
+            if vid not in trackers:
+                _LOGGER.debug("Adding new vehicle tracker for %s on line %s", vid, line_id)
+                vt = VehicleTracker(coordinator, vid, line_id)
+                trackers[vid] = vt
+                new_entities.append(vt)
 
-        for vid, tracker in trackers.items():
-            vehicle_exists = False
-            for line_id, vehicles in vehicles_now.items():
-                for vehicle in vehicles:
-                    v_id = vehicle.get("id") or vehicle.get("vehicle_id")
-                    if str(v_id) == vid:
-                        vehicle_exists = True
-                        break
-                if vehicle_exists:
-                    break
+    if new_entities:
+        async_add_entities(new_entities, update_before_add=True)
 
-            if vehicle_exists:
-                tracker.async_update_ha_state()
-            else:
-                tracker._update_from_data(None)
-                tracker.async_write_ha_state()
-
-    coordinator.async_add_listener(_handle_coordinator_update)
+    # Update existing trackers — CoordinatorEntity handles this automatically
+    # via _handle_coordinator_update on each entity, so we only need to
+    # mark unavailable ones
+    for vid, tracker in list(trackers.items()):
+        if vid not in current_ids:
+            tracker._update_from_data(None)
+            tracker.async_write_ha_state()
 
 
 class VehicleTracker(CoordinatorEntity, TrackerEntity):
