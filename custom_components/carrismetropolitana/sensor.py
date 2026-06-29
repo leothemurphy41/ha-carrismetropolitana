@@ -457,7 +457,14 @@ class LinesMunicipalitySensor(CarrisEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"lines": self._lines}
+        # Limita a 50 linhas e apenas campos essenciais para não exceder 16384 bytes
+        return {
+            "municipality_id": self._municipality_id,
+            "lines": [
+                {"id": l.get("id"), "name": l.get("short_name") or l.get("long_name")}
+                for l in self._lines[:50]
+            ],
+        }
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -490,7 +497,15 @@ class StopsMunicipalitySensor(CarrisEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"stops": self._stops}
+        # Limita a 50 paragens e apenas campos essenciais para não exceder 16384 bytes
+        return {
+            "municipality_id": self._municipality_id,
+            "total": len(self._stops),
+            "stops": [
+                {"id": s.get("id"), "name": s.get("long_name") or s.get("short_name")}
+                for s in self._stops[:50]
+            ],
+        }
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
