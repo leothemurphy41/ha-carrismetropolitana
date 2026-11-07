@@ -46,7 +46,7 @@ class CarrisMetropolitanaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             try:
                 _LOGGER.debug("Fetching municipalities...")
-                municipalities = await api.get_municipalities()
+                municipalities = await api.get_municipalities_v1()
                 _LOGGER.debug("Got %s municipalities", len(municipalities))
 
                 self._municipalities = {}
