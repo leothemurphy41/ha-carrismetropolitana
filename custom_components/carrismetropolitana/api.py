@@ -144,6 +144,35 @@ class CarrisMetropolitanaAPI:
             )
             return []
 
+    async def get_municipalities_v1(self) -> list[dict]:
+        """
+        Get municipalities from the v1 endpoint (same output as get_municipalities).
+        - This is a workaround for v2 API endpoint -
+        """
+        try:
+            data = await self._get("municipalities", base_url=BASE_URL_V1)
+
+            if not isinstance(data, list):
+                _LOGGER.warning(
+                    "Unexpected municipalities response type: %s",
+                    type(data),
+                )
+                return []
+
+            municipalities = [
+                {"id": m["id"], "name": m["name"]}
+                for m in data
+                if m.get("id") and m.get("name")
+            ]
+            municipalities.sort(key=lambda m: m["name"])
+
+            _LOGGER.info("Loaded %s municipalities", len(municipalities))
+            return municipalities
+
+        except Exception as err:
+            _LOGGER.exception("Error fetching municipalities (v1): %s", err)
+            return []
+
     async def get_lines(self) -> list[dict]:
         """Get all lines."""
         try:
