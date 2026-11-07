@@ -13,6 +13,7 @@ PLATFORMS = ["sensor", "binary_sensor", "device_tracker"]
 
 # API settings
 API_BASE_URL = "https://api.carrismetropolitana.pt/v2"
+API_BASE_URL_V1 = "https://api.carrismetropolitana.pt/v1"
 API_TIMEOUT = 30  # seconds
 API_RETRY_ATTEMPTS = 3
 API_RETRY_DELAY = 5  # seconds

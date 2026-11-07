@@ -9,6 +9,7 @@ import aiohttp
 _LOGGER = logging.getLogger(__name__)
 
 BASE_URL = "https://api.carrismetropolitana.pt/v2"
+BASE_URL_V1 = "https://api.carrismetropolitana.pt/v1"
 
 # Timeout configurável - aumentado para 30 segundos devido ao grande volume de dados
 DEFAULT_TIMEOUT = 30
@@ -23,9 +24,9 @@ class CarrisMetropolitanaAPI:
         self._timeout = timeout
         _LOGGER.debug("API client initialized with timeout: %s seconds", timeout)
 
-    async def _get(self, endpoint: str) -> Any:
+    async def _get(self, endpoint: str, base_url: str = BASE_URL) -> Any:
         """Make a GET request to the API."""
-        url = f"{BASE_URL}/{endpoint}"
+        url = f"{base_url}/{endpoint}"
 
         try:
             _LOGGER.debug("Carris API request: %s", url)
@@ -142,6 +143,35 @@ class CarrisMetropolitanaAPI:
                 "Error fetching municipalities: %s",
                 err,
             )
+            return []
+
+    async def get_municipalities_v1(self) -> list[dict]:
+        """
+        Get municipalities from the v1 endpoint (same output as get_municipalities).
+        - This is a workaround for v2 API endpoint -
+        """
+        try:
+            data = await self._get("municipalities", base_url=BASE_URL_V1)
+
+            if not isinstance(data, list):
+                _LOGGER.warning(
+                    "Unexpected municipalities response type: %s",
+                    type(data),
+                )
+                return []
+
+            municipalities = [
+                {"id": m["id"], "name": m["name"]}
+                for m in data
+                if m.get("id") and m.get("name")
+            ]
+            municipalities.sort(key=lambda m: m["name"])
+
+            _LOGGER.info("Loaded %s municipalities", len(municipalities))
+            return municipalities
+
+        except Exception as err:
+            _LOGGER.exception("Error fetching municipalities (v1): %s", err)
             return []
 
     async def get_lines(self) -> list[dict]:
