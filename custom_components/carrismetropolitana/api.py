@@ -9,6 +9,7 @@ import aiohttp
 _LOGGER = logging.getLogger(__name__)
 
 BASE_URL = "https://api.carrismetropolitana.pt/v2"
+BASE_URL_V1 = "https://api.carrismetropolitana.pt/v1"
 
 # Timeout configurável - aumentado para 30 segundos devido ao grande volume de dados
 DEFAULT_TIMEOUT = 30
@@ -23,9 +24,9 @@ class CarrisMetropolitanaAPI:
         self._timeout = timeout
         _LOGGER.debug("API client initialized with timeout: %s seconds", timeout)
 
-    async def _get(self, endpoint: str) -> Any:
+    async def _get(self, endpoint: str, base_url: str = BASE_URL) -> Any:
         """Make a GET request to the API."""
-        url = f"{BASE_URL}/{endpoint}"
+        url = f"{base_url}/{endpoint}"
 
         try:
             _LOGGER.debug("Carris API request: %s", url)
